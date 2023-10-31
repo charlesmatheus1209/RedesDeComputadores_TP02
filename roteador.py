@@ -8,6 +8,7 @@ from socket import AF_INET, SOCK_DGRAM
 
 tabelaRoteamento = dict()
 tabelaEnderecos = dict()
+timer = time.t
 
     
 
