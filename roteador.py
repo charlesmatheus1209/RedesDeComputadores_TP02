@@ -1,5 +1,6 @@
 import socket
 import sys
+import time
 
 from socket import AF_INET, SOCK_DGRAM
 
@@ -37,6 +38,12 @@ def enviaMensagem(dest, mensagem):
     
     udp = socket.socket(AF_INET, SOCK_DGRAM)
     udp.sendto(bytes(mensagem, 'utf-8'), tabelaEnderecos[dest])
+    print(tabelaRoteamento[dest][0])
+    if(tabelaRoteamento[dest][0] == dest):
+        print("R", mensagem)
+    else:
+        print("E", dest, mensagem)
+    
     
     
     
@@ -68,6 +75,7 @@ while True:
     msgFromServer = socket_.recvfrom(1024)
     mensagem = msgFromServer[0].decode('utf-8')
     comando = mensagem[0] 
+
        
     if(comando == 'C'):
         print('Comando C')
