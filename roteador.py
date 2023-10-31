@@ -1,6 +1,8 @@
 import socket
+from struct import *
 import sys
-import time
+
+import threading
 
 from socket import AF_INET, SOCK_DGRAM
 
@@ -8,7 +10,44 @@ from socket import AF_INET, SOCK_DGRAM
 
 tabelaRoteamento = dict()
 tabelaEnderecos = dict()
-timer = time.t
+
+timeout_seconds = 2
+
+
+def CompartilhaTabelaRoteamento():
+    #Formato da mensagem:
+    #J-ORIGEM-Tabela  <- USANDO O PACK E UNPACK
+    print("Iniciando compartilhamento da Tabela de Roteamento")
+    
+    chaves = tabelaRoteamento.keys()
+    Tabela = []
+    for chave in chaves:
+        Tabela.append(identificador + "--" + chave + "--" + tabelaRoteamento[chave][0] + "--" + str(tabelaRoteamento[chave][1]))
+    
+    b = bytearray()
+    b += bytes("J", 'utf-8')
+    for string in Tabela:
+        bs = string.encode()
+        b += pack("=I", len(bs)) + bs
+        
+    # print("Mostrando mensagem")
+    # print(b)
+    
+    udp = socket.socket(AF_INET, SOCK_DGRAM)
+    for chave in tabelaRoteamento.keys():
+        udp.sendto(b,tabelaEnderecos[chave])
+    
+    udp.close()
+    # while b:
+    #     length, *_ = unpack("=I", b[:4])
+    #     print(b[4:length+4].decode())
+    #     b = b[length+4:]
+    
+    
+    
+    timer = threading.Timer(timeout_seconds, CompartilhaTabelaRoteamento)
+    timer.start()
+
 
     
 
@@ -33,19 +72,19 @@ def deletaConexao(comando):
     if(comando in tabelaRoteamento):
         del tabelaRoteamento[comando]
         
-def enviaMensagem(dest, mensagem):
-    print("Função: enviaMensagem()", dest, " -- ", mensagem)
-    print(tabelaEnderecos[dest])
+def enviaMensagem(dest, mensagem): 
+    #Formato da mensagem:
+    #S-ORIGEM-DESTINO-MENSAGEM  <- USANDO O PACK E UNPACK
+    print("Função: enviaMensagem(), Destino: '", dest, "' -- Mensagem: '", mensagem,"'")
     
-    udp = socket.socket(AF_INET, SOCK_DGRAM)
-    udp.sendto(bytes(mensagem, 'utf-8'), tabelaEnderecos[dest])
-    print(tabelaRoteamento[dest][0])
-    if(tabelaRoteamento[dest][0] == dest):
-        print("R", mensagem)
+    chaves = tabelaRoteamento.keys()
+    if(dest in chaves):
+        udp = socket.socket(AF_INET, SOCK_DGRAM)
+        mensagemEnviar = pack(">c32s32s64s", 'S'.encode(), identificador.encode(), dest.encode(), mensagem.encode())
+        udp.sendto(mensagemEnviar, tabelaEnderecos[dest])
+        udp.close()
     else:
-        print("E", dest, mensagem)
-    
-    
+        print("O destino '", dest ,"' não está na tabela de roteamento de '", identificador, "'")
     
     
 def mostraTabela():
@@ -53,7 +92,7 @@ def mostraTabela():
     chaves = tabelaRoteamento.keys()
     for chave in chaves:
         print(chave, tabelaRoteamento[chave][0], tabelaRoteamento[chave][1])
-    
+        
     
 if(len(sys.argv) != 3):
     print("quantidade erada de parametros")
@@ -69,15 +108,15 @@ print("Arquivo: ", arquivoConfig)
 leituraDoArquivo(arquivoConfig)
 
 socket_ = socket.socket(AF_INET, SOCK_DGRAM)
-socket_.bind((identificador,1234))
+socket_.bind(tabelaEnderecos[identificador])
+
 
 
 while True:
     msgFromServer = socket_.recvfrom(1024)
     mensagem = msgFromServer[0].decode('utf-8')
     comando = mensagem[0] 
-
-       
+    
     if(comando == 'C'):
         print('Comando C')
         criaConexao(mensagem[1:])
@@ -89,10 +128,36 @@ while True:
         mostraTabela()
     elif(comando == 'I'):
         print('Comando I')
+        # Iniciando o temporizador
+        timer = threading.Timer(timeout_seconds, CompartilhaTabelaRoteamento)
+        timer.start()
+
     elif(comando == 'E'):
-        print('Comando E')
-        destino = msgFromServer[0][1:msgFromServer[0].find(b'\x00')].decode('utf-8')
-        enviaMensagem(destino, mensagem[len(destino)+1:])
+        print('Comando E')        
+        unpacked = unpack(">c32s64s", msgFromServer[0])
+        enviaMensagem(unpacked[1].split(b'\x00')[0].decode('utf-8'), unpacked[2].decode('utf-8'))
+    elif(comando == 'S'): #Mensagem recebida de outro roteador
+        print('Comando S')  
+        unpacked = unpack(">c32s32s64s", msgFromServer[0])
+        if(unpacked[2].split(b'\x00')[0].decode('utf-8') == identificador):
+            print("R")
+        else:
+            destino = unpacked[2].split(b'\x00')[0].decode('utf-8')
+            mensagemParaEnviar = unpacked[3].split(b'\x00')[0].decode('utf-8')
+            proximoPasso = tabelaRoteamento[destino][0]
+            print("E", destino, mensagemParaEnviar, proximoPasso)
+    elif(comando == "J"):
+        print('Comando J')  
+        
+        b = msgFromServer[0][1:]
+        print(b)
+        while b:
+            length, *_ = unpack("=I", b[:4])
+            print(b[4:length+4].decode())
+            b = b[length+4:]
+    else:
+        print("estou no else")
+        
     
     mostraTabela()
         

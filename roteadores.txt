@@ -3,3 +3,5 @@ kronos amazonas.grad.dcc.ufmg.br 6666
 risa 127.0.0.1 54321
 terra localhost 55555
 id localhost 1234
+ipi localhost 5544
+kaka localhost 4578
