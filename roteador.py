@@ -12,6 +12,7 @@ tabelaRoteamento = dict()
 tabelaEnderecos = dict()
 
 timeout_seconds = 2
+bloqueioComandoI = True
 
 
 def CompartilhaTabelaRoteamento():
@@ -22,7 +23,8 @@ def CompartilhaTabelaRoteamento():
     chaves = tabelaRoteamento.keys()
     Tabela = []
     for chave in chaves:
-        Tabela.append(identificador + "--" + chave + "--" + tabelaRoteamento[chave][0] + "--" + str(tabelaRoteamento[chave][1]))
+        if(chave != identificador):
+            Tabela.append(identificador + "--" + chave + "--" + tabelaRoteamento[chave][0] + "--" + str(tabelaRoteamento[chave][1]))
     
     b = bytearray()
     b += bytes("J", 'utf-8')
@@ -35,7 +37,8 @@ def CompartilhaTabelaRoteamento():
     
     udp = socket.socket(AF_INET, SOCK_DGRAM)
     for chave in tabelaRoteamento.keys():
-        udp.sendto(b,tabelaEnderecos[chave])
+        if(chave != identificador):
+            udp.sendto(b,tabelaEnderecos[chave])
     
     udp.close()
     # while b:
@@ -47,9 +50,6 @@ def CompartilhaTabelaRoteamento():
     
     timer = threading.Timer(timeout_seconds, CompartilhaTabelaRoteamento)
     timer.start()
-
-
-    
 
 def leituraDoArquivo(nomeArquivo):
     arquivo= open(nomeArquivo,'r')
@@ -77,22 +77,35 @@ def enviaMensagem(dest, mensagem):
     #S-ORIGEM-DESTINO-MENSAGEM  <- USANDO O PACK E UNPACK
     print("Função: enviaMensagem(), Destino: '", dest, "' -- Mensagem: '", mensagem,"'")
     
-    chaves = tabelaRoteamento.keys()
-    if(dest in chaves):
+    if(dest in tabelaRoteamento.keys()):
         udp = socket.socket(AF_INET, SOCK_DGRAM)
+        proximo = tabelaRoteamento[dest][0]
         mensagemEnviar = pack(">c32s32s64s", 'S'.encode(), identificador.encode(), dest.encode(), mensagem.encode())
-        udp.sendto(mensagemEnviar, tabelaEnderecos[dest])
+        udp.sendto(mensagemEnviar, tabelaEnderecos[proximo])
         udp.close()
     else:
-        print("O destino '", dest ,"' não está na tabela de roteamento de '", identificador, "'")
-    
+        print("O destino '", dest ,"' não está na tabela de roteamento de '", identificador, "'")   
     
 def mostraTabela():
     print("Função: mostraTabela()")
     chaves = tabelaRoteamento.keys()
     for chave in chaves:
         print(chave, tabelaRoteamento[chave][0], tabelaRoteamento[chave][1])
-        
+
+def processaTabelaRecebida(tabelaRecebida, origem):
+    print("Função: processaTabelaRecebida(), Tabela: '", tabelaRecebida, "' de: ", origem)
+    
+    for destino in tabelaRecebida.keys():
+        # print(destino)
+        if(destino in tabelaRoteamento.keys()):
+            # print("Já existe na minha tabela")
+            
+            if(tabelaRecebida[destino][1] < tabelaRoteamento[destino][1]):
+                tabelaRoteamento[destino] = tabelaRecebida[destino]
+        else:
+            # print("É novo para mim")
+            tabelaRoteamento[destino] = tabelaRecebida[destino]
+    
     
 if(len(sys.argv) != 3):
     print("quantidade erada de parametros")
@@ -105,6 +118,7 @@ print("identificador: ", identificador)
 print("Arquivo: ", arquivoConfig)
 
 
+tabelaRoteamento[identificador] = (identificador, 0)
 leituraDoArquivo(arquivoConfig)
 
 socket_ = socket.socket(AF_INET, SOCK_DGRAM)
@@ -128,9 +142,14 @@ while True:
         mostraTabela()
     elif(comando == 'I'):
         print('Comando I')
-        # Iniciando o temporizador
-        timer = threading.Timer(timeout_seconds, CompartilhaTabelaRoteamento)
-        timer.start()
+        
+        
+        
+        if(bloqueioComandoI):
+            # Iniciando o temporizador
+            timer = threading.Timer(timeout_seconds, CompartilhaTabelaRoteamento)
+            timer.start()
+            bloqueioComandoI = False
 
     elif(comando == 'E'):
         print('Comando E')        
@@ -140,21 +159,31 @@ while True:
         print('Comando S')  
         unpacked = unpack(">c32s32s64s", msgFromServer[0])
         if(unpacked[2].split(b'\x00')[0].decode('utf-8') == identificador):
-            print("R")
+            print("R", unpacked[3])
         else:
             destino = unpacked[2].split(b'\x00')[0].decode('utf-8')
             mensagemParaEnviar = unpacked[3].split(b'\x00')[0].decode('utf-8')
             proximoPasso = tabelaRoteamento[destino][0]
             print("E", destino, mensagemParaEnviar, proximoPasso)
+            enviaMensagem(destino, mensagemParaEnviar)
+            
     elif(comando == "J"):
         print('Comando J')  
+        tabelaRecebida = dict() #destino = (caminho, custo)
         
         b = msgFromServer[0][1:]
-        print(b)
         while b:
             length, *_ = unpack("=I", b[:4])
-            print(b[4:length+4].decode())
+            # print(b[4:length+4].decode().split("--"))
+            received = b[4:length+4].decode().split("--")
+            tabelaRecebida[received[1]] = (received[0], int(received[3]) + 1)
             b = b[length+4:]
+        
+        # print("Tabela Recebida: ")
+        # print(tabelaRecebida)
+        origem = received[0]
+        processaTabelaRecebida(tabelaRecebida, origem)
+        
     else:
         print("estou no else")
         
