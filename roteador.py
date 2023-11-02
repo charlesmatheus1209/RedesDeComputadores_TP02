@@ -1,3 +1,6 @@
+# Nome1: Marielle Cristina Silva Costa - Matricula: 2021014805
+# Nome2: Charles Matheus de Souza Soares Nascimento - Matricula: 2021014821
+
 import socket
 from struct import *
 import sys
