@@ -1,21 +1,25 @@
-import threading
-import time
+from struct import *
 
-# Função que gera uma interrupção após um determinado tempo
-def timeout():
-    print("Deu timeout")
-    timer = threading.Timer(timeout_seconds, timeout)
-    timer.start()
+str1 = "Arroz0"
+b = bytes()
+b += b"A"
+b += b"r"
+b += b"r"
+b += b"o"
+b += b"z"
+b += b"0"
+print(b)
+packed = pack("c32s", "D".encode(), b)
 
-# Definindo o tempo limite para 5 segundos
-timeout_seconds = 2
+unpacked = unpack("c32s", packed)
 
-# Iniciando o temporizador
-timer = threading.Timer(timeout_seconds, timeout)
-timer.start()
-i = 0
-while True:
-    print(i)
-    i += 1
-    time.sleep(5)
-        
+# print(unpacked[1].rstrip(b'\x00').decode() == "Arro0z0")
+# print(unpacked[1].rstrip(b'\x00').decode())
+
+print(unpacked[1].decode())
+print(str1)
+
+print(len(unpacked[1].rstrip(b'\x00').decode()))
+print(len(str1))
+
+print(unpacked[1].rstrip(b'\x00').decode() == str1)
